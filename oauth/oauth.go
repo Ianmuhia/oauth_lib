@@ -6,9 +6,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/mercadolibre/golang-restclient/rest"
+	"github.com/go-resty/resty/v2"
 
 	"bookstore_oauth-go/oauth/errors"
 )
@@ -21,10 +20,12 @@ const (
 )
 
 var (
-	oauthRestClient = rest.RequestBuilder{
-		BaseURL: "http://localhost:8080",
-		Timeout: 200 * time.Millisecond,
-	}
+	client = resty.New()
+
+	// oauthRestClient = rest.RequestBuilder{
+	// 	BaseURL: "http://localhost:8080",
+	// 	Timeout: 200 * time.Millisecond,
+	// }
 )
 
 type accessToken struct {
@@ -80,6 +81,7 @@ func AuthenticateRequest(request *http.Request) *errors.RestErr {
 	}
 	request.Header.Add(headerXClientId, fmt.Sprintf("%v", at.ClientId))
 	request.Header.Add(headerXCallerId, fmt.Sprintf("%v", at.UserId))
+	return nil
 }
 
 func cleanRequest(request *http.Request) {
@@ -92,13 +94,15 @@ func cleanRequest(request *http.Request) {
 
 func getAccessToken(accessTokenId string) (*accessToken, *errors.RestErr) {
 
-	response := oauthRestClient.Get(fmt.Sprintf("/oauth/access_token/%s", accessTokenId))
-	if response == nil || response.Response == nil {
+	response, _ := client.R().Get(fmt.Sprintf("/oauth/access_token/%s", accessTokenId))
+
+	// response := oauthRestClient.Get(fmt.Sprintf("/oauth/access_token/%s", accessTokenId))
+	if response == nil || response.Body() == nil {
 		return nil, errors.NewInternalServerError("invalid response when trying to get access_token")
 	}
-	if response.StatusCode > 299 {
+	if response.StatusCode() > 299 {
 		var restErr errors.RestErr
-		err := json.Unmarshal(response.Bytes(), &restErr)
+		err := json.Unmarshal(response.Body(), &restErr)
 		if err != nil {
 			return nil, errors.NewInternalServerError("invalid error interface when trying to get access_token")
 
@@ -106,7 +110,7 @@ func getAccessToken(accessTokenId string) (*accessToken, *errors.RestErr) {
 		return nil, &restErr
 	}
 	var at accessToken
-	if err := json.Unmarshal(response.Bytes(), &at); err != nil {
+	if err := json.Unmarshal(response.Body(), &at); err != nil {
 		return nil, errors.NewInternalServerError("error when trying to unmarshal access_token response")
 	}
 	return &at, nil
